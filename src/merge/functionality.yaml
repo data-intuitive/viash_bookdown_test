@@ -1,0 +1,29 @@
+name: merge_reports
+description: Merge multiple reports into one bookdown
+arguments: 
+- name: "--input"
+  alternatives: ["-i"]
+  type: file
+  description: One or more input files (md or Rmd)
+  direction: input
+  required: true
+  multiple: true
+  default: report.md
+- name: "--output"
+  alternatives: ["-o"]
+  type: file
+  description: Path of the report.
+  direction: output
+- name: "--format"
+  alternatives: ["-f"]
+  type: string
+  description: The format of the output file.
+  direction: input
+  required: false
+  default: "bookdown::pdf_book"
+  values: [bookdown::pdf_book, bookdown::html_book]
+resources:
+- type: r_script
+  path: merge.R
+- path: index.Rmd
+

@@ -1,0 +1,364 @@
+#!/usr/bin/env bash
+
+set -e
+
+# define helper functions
+# ViashQuote: put quotes around non flag values
+# $1     : unquoted string
+# return : possibly quoted string
+# examples:
+#   ViashQuote --foo      # returns --foo
+#   ViashQuote bar        # returns 'bar'
+#   Viashquote --foo=bar  # returns --foo='bar'
+function ViashQuote {
+  if [[ "$1" =~ ^-+[a-zA-Z0-9_\-]+=.+$ ]]; then
+    echo "$1" | sed "s#=\(.*\)#='\1'#"
+  elif [[ "$1" =~ ^-+[a-zA-Z0-9_\-]+$ ]]; then
+    echo "$1"
+  else
+    echo "'$1'"
+  fi
+}
+# ViashRemoveFlags: Remove leading flag
+# $1     : string with a possible leading flag
+# return : string without possible leading flag
+# examples:
+#   ViashRemoveFlags --foo=bar  # returns bar
+function ViashRemoveFlags {
+  echo "$1" | sed 's/^--*[a-zA-Z0-9_\-]*=//'
+}
+# ViashSourceDir: return the path of a bash file, following symlinks
+# usage   : ViashSourceDir ${BASH_SOURCE[0]}
+# $1      : Should always be set to ${BASH_SOURCE[0]}
+# returns : The absolute path of the bash file
+function ViashSourceDir {
+  SOURCE="$1"
+  while [ -h "$SOURCE" ]; do
+    DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+  done
+  cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd
+}
+
+# find source folder of this component
+VIASH_RESOURCES_DIR=`ViashSourceDir ${BASH_SOURCE[0]}`
+
+# helper function for installing extra requirements for this component
+function ViashDockerfile {
+# Print Dockerfile contents to stdout
+cat << 'VIASHDOCKER'
+FROM rocker/verse
+RUN Rscript -e 'if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")' && \
+  Rscript -e 'remotes::install_cran(c("optparse", "rmarkdown", "tidyverse"), repos = "https://cran.rstudio.com")'
+
+VIASHDOCKER
+}
+
+# helper function for installing extra requirements for this component
+
+function ViashSetup {
+# create temporary directory to store temporary dockerfile in
+tmpdir=$(mktemp -d /tmp/viash_setupdocker-make_vignette-XXXXXX)
+function clean_up {
+  rm -rf "\$tmpdir"
+}
+trap clean_up EXIT
+cat > $tmpdir/Dockerfile << 'VIASHDOCKER'
+FROM rocker/verse
+RUN Rscript -e 'if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")' && \
+  Rscript -e 'remotes::install_cran(c("optparse", "rmarkdown", "tidyverse"), repos = "https://cran.rstudio.com")'
+
+VIASHDOCKER
+docker build -t viash_autogen/make_vignette:latest $tmpdir
+}
+# ViashHelp: Display helpful explanation about this executable
+function ViashHelp {
+   echo "An example for generating an RMarkdown output."
+   echo
+   echo "Options:"
+    echo "    -t string, --title=string"
+    echo "        type: string, default: My plot"
+    echo "        A title for the plot"
+    echo ""
+    echo "    -m double, --mean=double"
+    echo "        type: double, default: 0.0"
+    echo "        The mean of the distribution"
+    echo ""
+    echo "    -s double, --sd=double"
+    echo "        type: double, default: 1.0"
+    echo "        The standard deviation of the distribution"
+    echo ""
+    echo "    -o file, --output=file"
+    echo "        type: file"
+    echo "        Path of the report."
+    echo ""
+    echo "    -f string, --format=string"
+    echo "        type: string, default: pdf_document"
+    echo "        The format of the output file."
+    echo ""
+}
+
+
+# ViashAbsolutePath: generate absolute path from relative path
+# borrowed from https://stackoverflow.com/a/21951256
+# $1     : relative filename
+# return : absolute path
+# examples:
+#   ViashAbsolutePath some_file.txt   # returns /path/to/some_file.txt
+#   ViashAbsolutePath /foo/bar/..     # returns /foo
+function ViashAbsolutePath {
+  local thePath
+  if [[ ! "$1" =~ ^/ ]]; then
+    thePath="$PWD/$1"
+  else
+    thePath="$1"
+  fi
+  echo "$thePath" | (
+    IFS=/
+    read -a parr
+    declare -a outp
+    for i in "${parr[@]}"; do
+      case "$i" in
+      ''|.) continue ;;
+      ..)
+        len=${#outp[@]}
+        if ((len==0)); then
+          continue
+        else
+          unset outp[$((len-1))]
+        fi
+        ;;
+      *)
+        len=${#outp[@]}
+        outp[$len]="$i"
+      ;;
+      esac
+    done
+    echo /"${outp[*]}"
+  )
+}
+# ViashAutodetectMount: auto configuring docker mounts from parameters
+# $1                  : The parameter value
+# returns             : New parameter
+# $VIASH_EXTRA_MOUNTS : Added another parameter to be passed to docker
+# examples:
+#   ViashAutodetectMount /path/to/bar      # returns '/viash_automount/path/to/bar'
+#   ViashAutodetectMountArg /path/to/bar   # returns '-v /path/to:/viash_automount/path/to'
+function ViashAutodetectMount {
+  abs_path=$(ViashAbsolutePath "$1")
+  if [ -d "$abs_path" ]; then
+    mount_source="$abs_path"
+    base_name=""
+  else
+    mount_source=`dirname "$abs_path"`
+    base_name=`basename "$abs_path"`
+  fi
+  mount_target="/viash_automount$mount_source"
+  echo "$mount_target/$base_name"
+}
+function ViashAutodetectMountArg {
+  abs_path=$(ViashAbsolutePath "$1")
+  if [ -d "$abs_path" ]; then
+    mount_source="$abs_path"
+    base_name=""
+  else
+    mount_source=`dirname "$abs_path"`
+    base_name=`basename "$abs_path"`
+  fi
+  mount_target="/viash_automount$mount_source"
+  echo "-v \"$mount_source:$mount_target\""
+}
+# ViashExtractFlags: Retain leading flag
+# $1     : string with a possible leading flag
+# return : leading flag
+# examples:
+#   ViashExtractFlags --foo=bar  # returns --foo
+function ViashExtractFlags {
+  echo $1 | sed 's/=.*//'
+}
+# initialise autodetect mount variable
+VIASH_EXTRA_MOUNTS=''
+
+# initialise array
+VIASH_POSITIONAL_ARGS=''
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            ViashHelp
+            exit;;
+        ---setup)
+            ViashSetup
+            exit 0
+            ;;
+        ---dockerfile)
+            ViashDockerfile
+            exit 0
+            ;;
+        --title)
+            VIASH_PAR_TITLE="$2"
+            shift 2
+            ;;
+        --title=*)
+            VIASH_PAR_TITLE=$(ViashRemoveFlags "$1")
+            shift 1
+            ;;
+        -t)
+            VIASH_PAR_TITLE="$2"
+            shift 2
+            ;;
+        --mean)
+            VIASH_PAR_MEAN="$2"
+            shift 2
+            ;;
+        --mean=*)
+            VIASH_PAR_MEAN=$(ViashRemoveFlags "$1")
+            shift 1
+            ;;
+        -m)
+            VIASH_PAR_MEAN="$2"
+            shift 2
+            ;;
+        --sd)
+            VIASH_PAR_SD="$2"
+            shift 2
+            ;;
+        --sd=*)
+            VIASH_PAR_SD=$(ViashRemoveFlags "$1")
+            shift 1
+            ;;
+        -s)
+            VIASH_PAR_SD="$2"
+            shift 2
+            ;;
+        --output)
+            VIASH_PAR_OUTPUT="$2"
+            shift 2
+            ;;
+        --output=*)
+            VIASH_PAR_OUTPUT=$(ViashRemoveFlags "$1")
+            shift 1
+            ;;
+        -o)
+            VIASH_PAR_OUTPUT="$2"
+            shift 2
+            ;;
+        --format)
+            VIASH_PAR_FORMAT="$2"
+            shift 2
+            ;;
+        --format=*)
+            VIASH_PAR_FORMAT=$(ViashRemoveFlags "$1")
+            shift 1
+            ;;
+        -f)
+            VIASH_PAR_FORMAT="$2"
+            shift 2
+            ;;
+        ---v|---volume)
+            VIASH_EXTRA_MOUNTS="$VIASH_EXTRA_MOUNTS -v "$2""
+            shift 2
+            ;;
+        ---volume=*)
+            VIASH_EXTRA_MOUNTS="$VIASH_EXTRA_MOUNTS -v $(ViashRemoveFlags "$2")"
+            shift 1
+            ;;
+         ---debug)
+            VIASH_DEBUG=yes
+            shift 1
+            ;;
+        *)    # positional arg or unknown option
+            # since the positional args will be eval'd, can we always quote, instead of using ViashQuote?
+            VIASH_POSITIONAL_ARGS="$VIASH_POSITIONAL_ARGS '$1'"
+            shift # past argument
+            ;;
+    esac
+done
+
+# parse positional parameters
+eval set -- $VIASH_POSITIONAL_ARGS
+
+
+
+if [ -z "$VIASH_PAR_TITLE" ]; then
+  VIASH_PAR_TITLE="My plot"
+fi
+if [ -z "$VIASH_PAR_MEAN" ]; then
+  VIASH_PAR_MEAN="0.0"
+fi
+if [ -z "$VIASH_PAR_SD" ]; then
+  VIASH_PAR_SD="1.0"
+fi
+if [ -z "$VIASH_PAR_FORMAT" ]; then
+  VIASH_PAR_FORMAT="pdf_document"
+fi
+
+
+
+
+
+# if desired, enter a debug session
+if [ ${VIASH_DEBUG} ]; then
+  echo "+ docker run --entrypoint=bash -i --rm -v "$VIASH_RESOURCES_DIR":/resources -v `pwd`:/pwd --workdir /pwd -t viash_autogen/make_vignette:latest"
+  docker run --entrypoint=bash -i --rm -v "$VIASH_RESOURCES_DIR":/resources -v `pwd`:/pwd --workdir /pwd -t viash_autogen/make_vignette:latest
+  exit 0
+fi
+
+# detect volumes from file arguments
+if [ ! -z "$VIASH_PAR_OUTPUT" ]; then
+  VIASH_EXTRA_MOUNTS="$VIASH_EXTRA_MOUNTS $(ViashAutodetectMountArg "$VIASH_PAR_OUTPUT")"
+  VIASH_PAR_OUTPUT=$(ViashAutodetectMount "$VIASH_PAR_OUTPUT")
+fi
+
+
+cat << VIASHEOF | eval docker run --entrypoint=bash -i --rm -v "$VIASH_RESOURCES_DIR":/resources $VIASH_EXTRA_MOUNTS viash_autogen/make_vignette:latest 
+set -e
+tempscript=\$(mktemp /tmp/viash-run-make_vignette-XXXXXX)
+function clean_up {
+  rm "\$tempscript"
+}
+trap clean_up EXIT
+cat > "\$tempscript" << 'VIASHMAIN'
+### VIASH START
+# The following code has been auto-generated by Viash.
+par <- list(
+  "title" = $( if [ ! -z ${VIASH_PAR_TITLE+x} ]; then echo "'$VIASH_PAR_TITLE'"; else echo NULL; fi ),
+  "mean" = $( if [ ! -z ${VIASH_PAR_MEAN+x} ]; then echo "as.numeric($VIASH_PAR_MEAN)"; else echo NULL; fi ),
+  "sd" = $( if [ ! -z ${VIASH_PAR_SD+x} ]; then echo "as.numeric($VIASH_PAR_SD)"; else echo NULL; fi ),
+  "output" = $( if [ ! -z ${VIASH_PAR_OUTPUT+x} ]; then echo "'$VIASH_PAR_OUTPUT'"; else echo NULL; fi ),
+  "format" = $( if [ ! -z ${VIASH_PAR_FORMAT+x} ]; then echo "'$VIASH_PAR_FORMAT'"; else echo NULL; fi )
+)
+
+resources_dir = "/resources"
+
+### VIASH END
+
+# get absolute path to file
+resources_dir <- normalizePath(resources_dir)
+path <- file.path(normalizePath(dirname(par\$output), mustWork = FALSE), basename(par\$output))
+
+# set wd to output dir
+orig_wd <- getwd()
+on.exit(setwd(orig_wd))
+setwd(dirname(path))
+
+# copy template to output dir
+rmd <- file.path(".", gsub("\\\\.[^\\\\.]*\$", ".Rmd", basename(path)))
+file.copy(
+  file.path(resources_dir, "report.Rmd"), 
+  rmd
+)
+on.exit(file.remove(rmd))
+
+# render markdown
+rmarkdown::render(
+  input = rmd,
+  output_file = basename(path),
+  output_format = par\$format,
+  params = par[c("title", "mean", "sd")]
+)
+VIASHMAIN
+Rscript "\$tempscript"
+
+VIASHEOF

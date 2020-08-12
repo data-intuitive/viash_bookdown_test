@@ -1,0 +1,31 @@
+---
+title: "README.md"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{bash, echo=TRUE, results='hide'}
+viash export -f src/component1/functionality.yaml -p src/component1/platform_docker.yaml -o target/component1
+viash export -f src/merge/functionality.yaml -p src/merge/platform_docker.yaml -o target/merge
+target/component1/make_vignette ---setup
+target/merge/merge_reports ---setup
+```
+
+```{bash, echo=TRUE, results='hide'}
+# make a folder for the output
+mkdir output
+
+# run a component
+target/component1/make_vignette -t help -o output/output1/report.md -f md_document
+
+# run another component (in this case the same one)
+target/component1/make_vignette -m 10 -s 2 -o output/output2/report.md -f md_document
+```
+
+```{bash, echo=TRUE, results='hide'}
+# merge reports
+target/merge/merge_reports -i output/output1/report.md -i output/output2/report.md -o output/book/book.pdf -f "bookdown::pdf_book"
+```

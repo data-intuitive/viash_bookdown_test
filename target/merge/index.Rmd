@@ -1,0 +1,16 @@
+--- 
+title: "A Minimal Book Example"
+author: "Robrecht Cannoodt"
+date: "`r Sys.Date()`"
+site: bookdown::bookdown_site
+# output: bookdown::gitbook
+# output: bookdown::pdf_book
+output: bookdown::html_book
+documentclass: book
+link-citations: yes
+github-repo: rstudio/bookdown-demo
+description: "Auto-generated report."
+---
+
+# Auto-generated report
+This is an auto-generated report.
