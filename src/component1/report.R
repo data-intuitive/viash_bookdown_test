@@ -10,6 +10,7 @@ resources_dir <- "src/component1/"
 ### VIASH END
 
 # get absolute path to file
+if (!file.exists(dirname(par$output))) dir.create(dirname(par$output), recursive = TRUE)
 resources_dir <- normalizePath(resources_dir)
 path <- file.path(normalizePath(dirname(par$output), mustWork = FALSE), basename(par$output))
 

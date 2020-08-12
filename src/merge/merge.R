@@ -9,6 +9,8 @@ resources_dir <- "src/merge/"
 
 print(par)
 
+cat("output ls: ", paste(list.files("/viash_automount"), collapse = ", "), "\n", sep = "")
+
 cat("get absolute path to file\n")
 input <- normalizePath(par$input)
 path <- file.path(normalizePath(dirname(par$output), mustWork = FALSE), basename(par$output))
@@ -23,7 +25,8 @@ cat("copy template to output dir\n")
 rmd <- file.path(".", gsub("\\.[^\\.]*$", ".Rmd", basename(path)))
 file.copy(
   file.path(resources_dir, "index.Rmd"), 
-  rmd
+  rmd,
+  overwrite = TRUE
 )
 on.exit(file.remove(rmd))
 
@@ -52,15 +55,12 @@ for (i in seq_along(input)) {
   writeLines(substitute_paths, mdout)
 }
 
-bookdown_yaml <- paste0("rmd_files: [\"", paste0(c(rmd, new_filenames), collapse = "\", \""), "\"]\ndelete_merged_file: true")
+bookdown_yaml <- paste0("rmd_files: [\"", paste0(c(rmd, new_filenames), collapse = "\", \""), "\"]\ndelete_merged_file: true\n")
 writeLines(bookdown_yaml, "_bookdown.yml")
 
-cat("render markdown\n")
-cat(rmd, "\n")
-cat(list.files("."))
 bookdown::render_book(
   rmd,
-  output_file = basename(path),
-  output_format = par$format
+  output_format = par$format,
+  clean_envir = FALSE
 )
 

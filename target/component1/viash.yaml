@@ -1,71 +1,16 @@
 info:
-  git_remote: NA
-  output_path: target/component1
-  functionality_path: src/component1/functionality.yaml
-  executable_path: target/component1/make_vignette
   platform_path: src/component1/platform_docker.yaml
-  git_commit: NA
+  git_commit: 402995c
+  functionality_path: src/component1/functionality.yaml
+  output_path: target/component1
+  executable_path: target/component1/make_vignette
   version: v0.2.0-rc2
+  git_remote: '[Ljava.lang.String;@446a1e84'
 functionality:
-  tests: []
   description: An example for generating an RMarkdown output.
-  arguments:
-  - alternatives:
-    - -t
-    multiple: false
-    name: --title
-    default: My plot
-    multiple_sep: ':'
-    type: string
-    direction: Input
-    description: A title for the plot
-    required: false
-  - default: 0.0
-    multiple: false
-    multiple_sep: ':'
-    name: --mean
-    description: The mean of the distribution
-    direction: Input
-    type: double
-    alternatives:
-    - -m
-    required: false
-  - type: double
-    description: The standard deviation of the distribution
-    alternatives:
-    - -s
-    multiple: false
-    required: false
-    default: 1.0
-    multiple_sep: ':'
-    direction: Input
-    name: --sd
-  - type: file
-    direction: Output
-    multiple_sep: ':'
-    alternatives:
-    - -o
-    name: --output
-    required: false
-    description: Path of the report.
-    multiple: false
-    must_exist: false
-  - default: pdf_document
-    multiple_sep: ':'
-    multiple: false
-    direction: Input
-    values:
-    - pdf_document
-    - html_document
-    name: --format
-    required: false
-    alternatives:
-    - -f
-    description: The format of the output file.
-    type: string
+  tests: []
   resources:
-  - is_executable: true
-    text: "#!/usr/bin/env bash\n\nset -e\n\n# define helper functions\n# ViashQuote:\
+  - text: "#!/usr/bin/env bash\n\nset -e\n\n# define helper functions\n# ViashQuote:\
       \ put quotes around non flag values\n# $1     : unquoted string\n# return :\
       \ possibly quoted string\n# examples:\n#   ViashQuote --foo      # returns --foo\n\
       #   ViashQuote bar        # returns 'bar'\n#   Viashquote --foo=bar  # returns\
@@ -192,7 +137,8 @@ functionality:
       \ -z ${VIASH_PAR_OUTPUT+x} ]; then echo \"'$VIASH_PAR_OUTPUT'\"; else echo NULL;\
       \ fi ),\n  \"format\" = $( if [ ! -z ${VIASH_PAR_FORMAT+x} ]; then echo \"'$VIASH_PAR_FORMAT'\"\
       ; else echo NULL; fi )\n)\n\nresources_dir = \"/resources\"\n\n### VIASH END\n\
-      \n# get absolute path to file\nresources_dir <- normalizePath(resources_dir)\n\
+      \n# get absolute path to file\nif (!file.exists(dirname(par\\$output))) dir.create(dirname(par\\\
+      $output), recursive = TRUE)\nresources_dir <- normalizePath(resources_dir)\n\
       path <- file.path(normalizePath(dirname(par\\$output), mustWork = FALSE), basename(par\\\
       $output))\n\n# set wd to output dir\norig_wd <- getwd()\non.exit(setwd(orig_wd))\n\
       setwd(dirname(path))\n\n# copy template to output dir\nrmd <- file.path(\".\"\
@@ -202,25 +148,80 @@ functionality:
       \  output_format = par\\$format,\n  params = par[c(\"title\", \"mean\", \"sd\"\
       )]\n)\nVIASHMAIN\nRscript \"\\$tempscript\"\n\nVIASHEOF\n"
     type: bash_script
+    is_executable: true
     name: make_vignette
-  - is_executable: false
+  - path: file:/home/rcannood/workspace_di/bookdown/src/component1/report.Rmd
+    is_executable: false
     type: file
-    path: file:/home/rcannood/workspace_di/bookdown/src/component1/report.Rmd
   name: make_vignette
+  arguments:
+  - required: false
+    multiple: false
+    type: string
+    description: A title for the plot
+    name: --title
+    default: My plot
+    multiple_sep: ':'
+    alternatives:
+    - -t
+    direction: Input
+  - name: --mean
+    type: double
+    description: The mean of the distribution
+    default: 0.0
+    alternatives:
+    - -m
+    multiple_sep: ':'
+    required: false
+    multiple: false
+    direction: Input
+  - multiple_sep: ':'
+    required: false
+    default: 1.0
+    description: The standard deviation of the distribution
+    multiple: false
+    direction: Input
+    name: --sd
+    type: double
+    alternatives:
+    - -s
+  - multiple_sep: ':'
+    required: false
+    alternatives:
+    - -o
+    multiple: false
+    direction: Output
+    must_exist: false
+    type: file
+    description: Path of the report.
+    name: --output
+  - name: --format
+    multiple_sep: ':'
+    required: false
+    multiple: false
+    alternatives:
+    - -f
+    description: The format of the output file.
+    default: pdf_document
+    values:
+    - pdf_document
+    - html_document
+    direction: Input
+    type: string
 platform:
+  type: docker
+  image: rocker/verse
   r:
-    svn: []
     git: []
-    bitbucket: []
-    github: []
-    gitlab: []
     url: []
     bioc: []
     cran:
     - optparse
     - rmarkdown
     - tidyverse
-  resolve_volume: Automatic
-  image: rocker/verse
-  type: docker
+    gitlab: []
+    bitbucket: []
+    svn: []
+    github: []
   workdir: /app
+  resolve_volume: Automatic
