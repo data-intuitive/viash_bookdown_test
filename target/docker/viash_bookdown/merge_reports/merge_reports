@@ -1,0 +1,383 @@
+#!/usr/bin/env bash
+
+set -e
+
+# define helper functions
+# ViashQuote: put quotes around non flag values
+# $1     : unquoted string
+# return : possibly quoted string
+# examples:
+#   ViashQuote --foo      # returns --foo
+#   ViashQuote bar        # returns 'bar'
+#   Viashquote --foo=bar  # returns --foo='bar'
+function ViashQuote {
+  if [[ "$1" =~ ^-+[a-zA-Z0-9_\-]+=.+$ ]]; then
+    echo "$1" | sed "s#=\(.*\)#='\1'#"
+  elif [[ "$1" =~ ^-+[a-zA-Z0-9_\-]+$ ]]; then
+    echo "$1"
+  else
+    echo "'$1'"
+  fi
+}
+# ViashRemoveFlags: Remove leading flag
+# $1     : string with a possible leading flag
+# return : string without possible leading flag
+# examples:
+#   ViashRemoveFlags --foo=bar  # returns bar
+function ViashRemoveFlags {
+  echo "$1" | sed 's/^--*[a-zA-Z0-9_\-]*=//'
+}
+# ViashSourceDir: return the path of a bash file, following symlinks
+# usage   : ViashSourceDir ${BASH_SOURCE[0]}
+# $1      : Should always be set to ${BASH_SOURCE[0]}
+# returns : The absolute path of the bash file
+function ViashSourceDir {
+  SOURCE="$1"
+  while [ -h "$SOURCE" ]; do
+    DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+  done
+  cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd
+}
+
+# find source folder of this component
+VIASH_RESOURCES_DIR=`ViashSourceDir ${BASH_SOURCE[0]}`
+
+# helper function for installing extra requirements for this component
+function ViashDockerfile {
+# Print Dockerfile contents to stdout
+cat << 'VIASHDOCKER'
+FROM rocker/verse
+RUN Rscript -e 'if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")' && \
+  Rscript -e 'remotes::install_cran(c("optparse", "rmarkdown", "tidyverse"), repos = "https://cran.rstudio.com")'
+
+VIASHDOCKER
+}
+
+# helper function for installing extra requirements for this component
+
+function ViashSetup {
+# create temporary directory to store temporary dockerfile in
+tmpdir=$(mktemp -d /tmp/viash_setupdocker-merge_reports-XXXXXX)
+function clean_up {
+  rm -rf "\$tmpdir"
+}
+trap clean_up EXIT
+cat > $tmpdir/Dockerfile << 'VIASHDOCKER'
+FROM rocker/verse
+RUN Rscript -e 'if (!requireNamespace("remotes", quietly = TRUE)) install.packages("remotes")' && \
+  Rscript -e 'remotes::install_cran(c("optparse", "rmarkdown", "tidyverse"), repos = "https://cran.rstudio.com")'
+
+VIASHDOCKER
+docker build -t viash_autogen/merge_reports:latest $tmpdir
+}
+# ViashHelp: Display helpful explanation about this executable
+function ViashHelp {
+   echo "Merge multiple reports into one bookdown"
+   echo
+   echo "Options:"
+    echo "    -i file1:file2:..., --input=file1:file2:..."
+    echo "        type: file, required parameter, multiple values allowed, default: report.md"
+    echo "        One or more input files (md or Rmd)"
+    echo ""
+    echo "    -o file, --output=file"
+    echo "        type: file"
+    echo "        Path of the report."
+    echo ""
+    echo "    -f string, --format=string"
+    echo "        type: string, default: bookdown::pdf_book"
+    echo "        The format of the output file."
+    echo ""
+}
+
+
+# ViashAbsolutePath: generate absolute path from relative path
+# borrowed from https://stackoverflow.com/a/21951256
+# $1     : relative filename
+# return : absolute path
+# examples:
+#   ViashAbsolutePath some_file.txt   # returns /path/to/some_file.txt
+#   ViashAbsolutePath /foo/bar/..     # returns /foo
+function ViashAbsolutePath {
+  local thePath
+  if [[ ! "$1" =~ ^/ ]]; then
+    thePath="$PWD/$1"
+  else
+    thePath="$1"
+  fi
+  echo "$thePath" | (
+    IFS=/
+    read -a parr
+    declare -a outp
+    for i in "${parr[@]}"; do
+      case "$i" in
+      ''|.) continue ;;
+      ..)
+        len=${#outp[@]}
+        if ((len==0)); then
+          continue
+        else
+          unset outp[$((len-1))]
+        fi
+        ;;
+      *)
+        len=${#outp[@]}
+        outp[$len]="$i"
+      ;;
+      esac
+    done
+    echo /"${outp[*]}"
+  )
+}
+# ViashAutodetectMount: auto configuring docker mounts from parameters
+# $1                  : The parameter value
+# returns             : New parameter
+# $VIASH_EXTRA_MOUNTS : Added another parameter to be passed to docker
+# examples:
+#   ViashAutodetectMount /path/to/bar      # returns '/viash_automount/path/to/bar'
+#   ViashAutodetectMountArg /path/to/bar   # returns '-v /path/to:/viash_automount/path/to'
+function ViashAutodetectMount {
+  abs_path=$(ViashAbsolutePath "$1")
+  if [ -d "$abs_path" ]; then
+    mount_source="$abs_path"
+    base_name=""
+  else
+    mount_source=`dirname "$abs_path"`
+    base_name=`basename "$abs_path"`
+  fi
+  mount_target="/viash_automount$mount_source"
+  echo "$mount_target/$base_name"
+}
+function ViashAutodetectMountArg {
+  abs_path=$(ViashAbsolutePath "$1")
+  if [ -d "$abs_path" ]; then
+    mount_source="$abs_path"
+    base_name=""
+  else
+    mount_source=`dirname "$abs_path"`
+    base_name=`basename "$abs_path"`
+  fi
+  mount_target="/viash_automount$mount_source"
+  echo "-v \"$mount_source:$mount_target\""
+}
+# ViashExtractFlags: Retain leading flag
+# $1     : string with a possible leading flag
+# return : leading flag
+# examples:
+#   ViashExtractFlags --foo=bar  # returns --foo
+function ViashExtractFlags {
+  echo $1 | sed 's/=.*//'
+}
+# initialise autodetect mount variable
+VIASH_EXTRA_MOUNTS=''
+
+# initialise array
+VIASH_POSITIONAL_ARGS=''
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            ViashHelp
+            exit;;
+        ---setup)
+            ViashSetup
+            exit 0
+            ;;
+        ---dockerfile)
+            ViashDockerfile
+            exit 0
+            ;;
+        --input)
+            if [ -z "$VIASH_PAR_INPUT" ]; then
+              VIASH_PAR_INPUT="$2"
+            else
+              VIASH_PAR_INPUT="$VIASH_PAR_INPUT:""$2"
+            fi
+            shift 2
+            ;;
+        --input=*)
+            if [ -z "$VIASH_PAR_INPUT" ]; then
+              VIASH_PAR_INPUT=$(ViashRemoveFlags "$1")
+            else
+              VIASH_PAR_INPUT="$VIASH_PAR_INPUT:"$(ViashRemoveFlags "$1")
+            fi
+            shift 1
+            ;;
+        -i)
+            if [ -z "$VIASH_PAR_INPUT" ]; then
+              VIASH_PAR_INPUT="$2"
+            else
+              VIASH_PAR_INPUT="$VIASH_PAR_INPUT:""$2"
+            fi
+            shift 2
+            ;;
+        --output)
+            VIASH_PAR_OUTPUT="$2"
+            shift 2
+            ;;
+        --output=*)
+            VIASH_PAR_OUTPUT=$(ViashRemoveFlags "$1")
+            shift 1
+            ;;
+        -o)
+            VIASH_PAR_OUTPUT="$2"
+            shift 2
+            ;;
+        --format)
+            VIASH_PAR_FORMAT="$2"
+            shift 2
+            ;;
+        --format=*)
+            VIASH_PAR_FORMAT=$(ViashRemoveFlags "$1")
+            shift 1
+            ;;
+        -f)
+            VIASH_PAR_FORMAT="$2"
+            shift 2
+            ;;
+        ---v|---volume)
+            VIASH_EXTRA_MOUNTS="$VIASH_EXTRA_MOUNTS -v "$2""
+            shift 2
+            ;;
+        ---volume=*)
+            VIASH_EXTRA_MOUNTS="$VIASH_EXTRA_MOUNTS -v $(ViashRemoveFlags "$2")"
+            shift 1
+            ;;
+         ---debug)
+            VIASH_DEBUG=yes
+            shift 1
+            ;;
+        *)    # positional arg or unknown option
+            # since the positional args will be eval'd, can we always quote, instead of using ViashQuote?
+            VIASH_POSITIONAL_ARGS="$VIASH_POSITIONAL_ARGS '$1'"
+            shift # past argument
+            ;;
+    esac
+done
+
+# parse positional parameters
+eval set -- $VIASH_POSITIONAL_ARGS
+
+
+
+# check whether required parameters exist
+if [ -z "$VIASH_PAR_INPUT" ]; then
+  echo '--input' is a required argument. Use "--help" to get more information on the parameters.
+  exit 1
+fi
+if [ -z "$VIASH_PAR_FORMAT" ]; then
+  VIASH_PAR_FORMAT="bookdown::pdf_book"
+fi
+
+
+
+
+
+# if desired, enter a debug session
+if [ ${VIASH_DEBUG} ]; then
+  echo "+ docker run --entrypoint=bash -i --rm -v "$VIASH_RESOURCES_DIR":/resources -v `pwd`:/pwd --workdir /pwd -t viash_autogen/merge_reports:latest"
+  docker run --entrypoint=bash -i --rm -v "$VIASH_RESOURCES_DIR":/resources -v `pwd`:/pwd --workdir /pwd -t viash_autogen/merge_reports:latest
+  exit 0
+fi
+
+# detect volumes from file arguments
+if [ ! -z "$VIASH_PAR_INPUT" ]; then
+  IFS=":"
+  for var in $VIASH_PAR_INPUT; do
+    VIASH_EXTRA_MOUNTS="$VIASH_EXTRA_MOUNTS $(ViashAutodetectMountArg "$var")"
+    if [ -z "$VIASH_TEST_INPUT" ]; then
+      VIASH_TEST_INPUT="$(ViashAutodetectMount "$var")"
+    else
+      VIASH_TEST_INPUT="$VIASH_TEST_INPUT:""$(ViashAutodetectMount "$var")"
+    fi
+  done
+  unset IFS
+  VIASH_PAR_INPUT="$VIASH_TEST_INPUT"
+fi
+if [ ! -z "$VIASH_PAR_OUTPUT" ]; then
+  VIASH_EXTRA_MOUNTS="$VIASH_EXTRA_MOUNTS $(ViashAutodetectMountArg "$VIASH_PAR_OUTPUT")"
+  VIASH_PAR_OUTPUT=$(ViashAutodetectMount "$VIASH_PAR_OUTPUT")
+fi
+
+
+cat << VIASHEOF | eval docker run --entrypoint=bash -i --rm -v "$VIASH_RESOURCES_DIR":/resources $VIASH_EXTRA_MOUNTS viash_autogen/merge_reports:latest 
+set -e
+tempscript=\$(mktemp /tmp/viash-run-merge_reports-XXXXXX)
+function clean_up {
+  rm "\$tempscript"
+}
+trap clean_up EXIT
+cat > "\$tempscript" << 'VIASHMAIN'
+### VIASH START
+# The following code has been auto-generated by Viash.
+par <- list(
+  "input" = $( if [ ! -z ${VIASH_PAR_INPUT+x} ]; then echo "strsplit('$VIASH_PAR_INPUT', split = ':')[[1]]"; else echo NULL; fi ),
+  "output" = $( if [ ! -z ${VIASH_PAR_OUTPUT+x} ]; then echo "'$VIASH_PAR_OUTPUT'"; else echo NULL; fi ),
+  "format" = $( if [ ! -z ${VIASH_PAR_FORMAT+x} ]; then echo "'$VIASH_PAR_FORMAT'"; else echo NULL; fi )
+)
+
+resources_dir = "/resources"
+
+### VIASH END
+
+print(par)
+
+cat("output ls: ", paste(list.files("/viash_automount"), collapse = ", "), "\\n", sep = "")
+
+cat("get absolute path to file\\n")
+input <- normalizePath(par\$input)
+path <- file.path(normalizePath(dirname(par\$output), mustWork = FALSE), basename(par\$output))
+resources_dir <- normalizePath(resources_dir)
+
+cat("set wd to output dir\\n")
+orig_wd <- getwd()
+on.exit(setwd(orig_wd))
+setwd(dirname(path))
+
+cat("copy template to output dir\\n")
+rmd <- file.path(".", gsub("\\\\.[^\\\\.]*\$", ".Rmd", basename(path)))
+file.copy(
+  file.path(resources_dir, "index.Rmd"), 
+  rmd,
+  overwrite = TRUE
+)
+on.exit(file.remove(rmd))
+
+cat("copy inputs to output dir\\n")
+new_filenames <- paste0(seq_along(input), "-part.md")
+input_dirnames <- gsub("\\\\.[^\\\\.]*\$", "_files/", input)
+new_dirnames <- paste0(seq_along(input), "-part_files/")
+for (i in seq_along(input)) {
+  mdin <- input[[i]]
+  mdout <- new_filenames[[i]]
+  file.copy(mdin, mdout, overwrite = TRUE)
+  
+  dirin <- input_dirnames[[i]]
+  dirout <- new_dirnames[[i]]
+  if (file.exists(dirin)) {
+    if (file.exists(dirout)) {
+      unlink(dirout, recursive = TRUE)
+    }
+    dir.create(dirout)
+    file.copy(dirin, dirout, recursive = TRUE, copy.mode = TRUE)
+  }
+  
+  # fix paths in md
+  lines <- readLines(mdout)
+  substitute_paths <- gsub(paste0("(\\\\[[^\\\\)]*\\\\])\\\\((", basename(dirin), "[^\\\\)]*)\\\\)"), paste0("\\\\1(", dirout, "\\\\2)"), lines)
+  writeLines(substitute_paths, mdout)
+}
+
+bookdown_yaml <- paste0("rmd_files: [\\"", paste0(c(rmd, new_filenames), collapse = "\\", \\""), "\\"]\\ndelete_merged_file: true\\n")
+writeLines(bookdown_yaml, "_bookdown.yml")
+
+bookdown::render_book(
+  rmd,
+  output_format = par\$format,
+  clean_envir = FALSE
+)
+VIASHMAIN
+Rscript "\$tempscript"
+
+VIASHEOF

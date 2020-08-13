@@ -1,0 +1,174 @@
+info:
+  version: v0.2.0-rc2
+  output_path: target/native/viash_bookdown/make_vignette
+  git_commit: 54e3b09
+  functionality_path: src/viash_bookdown/make_vignette/functionality.yaml
+  executable_path: target/native/viash_bookdown/make_vignette/make_vignette
+  platform_path: src/viash_bookdown/make_vignette/platform_native.yaml
+  git_remote: '[Ljava.lang.String;@6f43c82'
+functionality:
+  name: make_vignette
+  arguments:
+  - multiple_sep: ':'
+    alternatives:
+    - -t
+    direction: Input
+    required: false
+    multiple: false
+    description: A title for the plot
+    name: --title
+    type: string
+    default: My plot
+  - required: false
+    multiple: false
+    direction: Input
+    default: 0.0
+    type: double
+    alternatives:
+    - -m
+    multiple_sep: ':'
+    name: --mean
+    description: The mean of the distribution
+  - default: 1.0
+    alternatives:
+    - -s
+    multiple_sep: ':'
+    name: --sd
+    required: false
+    multiple: false
+    type: double
+    direction: Input
+    description: The standard deviation of the distribution
+  - name: --output
+    type: file
+    multiple: false
+    multiple_sep: ':'
+    alternatives:
+    - -o
+    direction: Output
+    description: Path of the report.
+    must_exist: false
+    required: false
+  - name: --format
+    type: string
+    values:
+    - pdf_document
+    - html_document
+    multiple: false
+    required: false
+    direction: Input
+    description: The format of the output file.
+    multiple_sep: ':'
+    default: pdf_document
+    alternatives:
+    - -f
+  description: An example for generating an RMarkdown output.
+  tests: []
+  resources:
+  - is_executable: true
+    name: make_vignette
+    text: "#!/usr/bin/env bash\n\nset -e\n\n# define helper functions\n# ViashQuote:\
+      \ put quotes around non flag values\n# $1     : unquoted string\n# return :\
+      \ possibly quoted string\n# examples:\n#   ViashQuote --foo      # returns --foo\n\
+      #   ViashQuote bar        # returns 'bar'\n#   Viashquote --foo=bar  # returns\
+      \ --foo='bar'\nfunction ViashQuote {\n  if [[ \"$1\" =~ ^-+[a-zA-Z0-9_\\-]+=.+$\
+      \ ]]; then\n    echo \"$1\" | sed \"s#=\\(.*\\)#='\\1'#\"\n  elif [[ \"$1\"\
+      \ =~ ^-+[a-zA-Z0-9_\\-]+$ ]]; then\n    echo \"$1\"\n  else\n    echo \"'$1'\"\
+      \n  fi\n}\n# ViashRemoveFlags: Remove leading flag\n# $1     : string with a\
+      \ possible leading flag\n# return : string without possible leading flag\n#\
+      \ examples:\n#   ViashRemoveFlags --foo=bar  # returns bar\nfunction ViashRemoveFlags\
+      \ {\n  echo \"$1\" | sed 's/^--*[a-zA-Z0-9_\\-]*=//'\n}\n# ViashSourceDir: return\
+      \ the path of a bash file, following symlinks\n# usage   : ViashSourceDir ${BASH_SOURCE[0]}\n\
+      # $1      : Should always be set to ${BASH_SOURCE[0]}\n# returns : The absolute\
+      \ path of the bash file\nfunction ViashSourceDir {\n  SOURCE=\"$1\"\n  while\
+      \ [ -h \"$SOURCE\" ]; do\n    DIR=\"$( cd -P \"$( dirname \"$SOURCE\" )\" >/dev/null\
+      \ 2>&1 && pwd )\"\n    SOURCE=\"$(readlink \"$SOURCE\")\"\n    [[ $SOURCE !=\
+      \ /* ]] && SOURCE=\"$DIR/$SOURCE\"\n  done\n  cd -P \"$( dirname \"$SOURCE\"\
+      \ )\" >/dev/null 2>&1 && pwd\n}\n\n# find source folder of this component\n\
+      VIASH_RESOURCES_DIR=`ViashSourceDir ${BASH_SOURCE[0]}`\n\n# helper function\
+      \ for installing extra requirements for this component\nfunction ViashDockerfile\
+      \ {\necho ''\n}\n\n# helper function for installing extra requirements for this\
+      \ component\n\nfunction ViashSetup {\nRscript -e 'if (!requireNamespace(\"remotes\"\
+      , quietly = TRUE)) install.packages(\"remotes\")' && \\\n  Rscript -e 'remotes::install_cran(c(\"\
+      optparse\", \"rmarkdown\", \"tidyverse\"), repos = \"https://cran.rstudio.com\"\
+      )'\n\n}\n# ViashHelp: Display helpful explanation about this executable\nfunction\
+      \ ViashHelp {\n   echo \"An example for generating an RMarkdown output.\"\n\
+      \   echo\n   echo \"Options:\"\n    echo \"    -t string, --title=string\"\n\
+      \    echo \"        type: string, default: My plot\"\n    echo \"        A title\
+      \ for the plot\"\n    echo \"\"\n    echo \"    -m double, --mean=double\"\n\
+      \    echo \"        type: double, default: 0.0\"\n    echo \"        The mean\
+      \ of the distribution\"\n    echo \"\"\n    echo \"    -s double, --sd=double\"\
+      \n    echo \"        type: double, default: 1.0\"\n    echo \"        The standard\
+      \ deviation of the distribution\"\n    echo \"\"\n    echo \"    -o file, --output=file\"\
+      \n    echo \"        type: file\"\n    echo \"        Path of the report.\"\n\
+      \    echo \"\"\n    echo \"    -f string, --format=string\"\n    echo \"   \
+      \     type: string, default: pdf_document\"\n    echo \"        The format of\
+      \ the output file.\"\n    echo \"\"\n}\n\n\n# initialise array\nVIASH_POSITIONAL_ARGS=''\n\
+      \nwhile [[ $# -gt 0 ]]; do\n    case \"$1\" in\n        -h|--help)\n       \
+      \     ViashHelp\n            exit;;\n        ---setup)\n            ViashSetup\n\
+      \            exit 0\n            ;;\n        ---dockerfile)\n            ViashDockerfile\n\
+      \            exit 0\n            ;;\n        --title)\n            VIASH_PAR_TITLE=\"\
+      $2\"\n            shift 2\n            ;;\n        --title=*)\n            VIASH_PAR_TITLE=$(ViashRemoveFlags\
+      \ \"$1\")\n            shift 1\n            ;;\n        -t)\n            VIASH_PAR_TITLE=\"\
+      $2\"\n            shift 2\n            ;;\n        --mean)\n            VIASH_PAR_MEAN=\"\
+      $2\"\n            shift 2\n            ;;\n        --mean=*)\n            VIASH_PAR_MEAN=$(ViashRemoveFlags\
+      \ \"$1\")\n            shift 1\n            ;;\n        -m)\n            VIASH_PAR_MEAN=\"\
+      $2\"\n            shift 2\n            ;;\n        --sd)\n            VIASH_PAR_SD=\"\
+      $2\"\n            shift 2\n            ;;\n        --sd=*)\n            VIASH_PAR_SD=$(ViashRemoveFlags\
+      \ \"$1\")\n            shift 1\n            ;;\n        -s)\n            VIASH_PAR_SD=\"\
+      $2\"\n            shift 2\n            ;;\n        --output)\n            VIASH_PAR_OUTPUT=\"\
+      $2\"\n            shift 2\n            ;;\n        --output=*)\n           \
+      \ VIASH_PAR_OUTPUT=$(ViashRemoveFlags \"$1\")\n            shift 1\n       \
+      \     ;;\n        -o)\n            VIASH_PAR_OUTPUT=\"$2\"\n            shift\
+      \ 2\n            ;;\n        --format)\n            VIASH_PAR_FORMAT=\"$2\"\n\
+      \            shift 2\n            ;;\n        --format=*)\n            VIASH_PAR_FORMAT=$(ViashRemoveFlags\
+      \ \"$1\")\n            shift 1\n            ;;\n        -f)\n            VIASH_PAR_FORMAT=\"\
+      $2\"\n            shift 2\n            ;;\n\n        *)    # positional arg\
+      \ or unknown option\n            # since the positional args will be eval'd,\
+      \ can we always quote, instead of using ViashQuote?\n            VIASH_POSITIONAL_ARGS=\"\
+      $VIASH_POSITIONAL_ARGS '$1'\"\n            shift # past argument\n         \
+      \   ;;\n    esac\ndone\n\n# parse positional parameters\neval set -- $VIASH_POSITIONAL_ARGS\n\
+      \n\n\nif [ -z \"$VIASH_PAR_TITLE\" ]; then\n  VIASH_PAR_TITLE=\"My plot\"\n\
+      fi\nif [ -z \"$VIASH_PAR_MEAN\" ]; then\n  VIASH_PAR_MEAN=\"0.0\"\nfi\nif [\
+      \ -z \"$VIASH_PAR_SD\" ]; then\n  VIASH_PAR_SD=\"1.0\"\nfi\nif [ -z \"$VIASH_PAR_FORMAT\"\
+      \ ]; then\n  VIASH_PAR_FORMAT=\"pdf_document\"\nfi\n\n\n\n\ncat << VIASHEOF\
+      \ | bash \nset -e\ntempscript=\\$(mktemp /tmp/viash-run-make_vignette-XXXXXX)\n\
+      function clean_up {\n  rm \"\\$tempscript\"\n}\ntrap clean_up EXIT\ncat > \"\
+      \\$tempscript\" << 'VIASHMAIN'\n### VIASH START\n# The following code has been\
+      \ auto-generated by Viash.\npar <- list(\n  \"title\" = $( if [ ! -z ${VIASH_PAR_TITLE+x}\
+      \ ]; then echo \"'$VIASH_PAR_TITLE'\"; else echo NULL; fi ),\n  \"mean\" = $(\
+      \ if [ ! -z ${VIASH_PAR_MEAN+x} ]; then echo \"as.numeric($VIASH_PAR_MEAN)\"\
+      ; else echo NULL; fi ),\n  \"sd\" = $( if [ ! -z ${VIASH_PAR_SD+x} ]; then echo\
+      \ \"as.numeric($VIASH_PAR_SD)\"; else echo NULL; fi ),\n  \"output\" = $( if\
+      \ [ ! -z ${VIASH_PAR_OUTPUT+x} ]; then echo \"'$VIASH_PAR_OUTPUT'\"; else echo\
+      \ NULL; fi ),\n  \"format\" = $( if [ ! -z ${VIASH_PAR_FORMAT+x} ]; then echo\
+      \ \"'$VIASH_PAR_FORMAT'\"; else echo NULL; fi )\n)\n\nresources_dir = \"$VIASH_RESOURCES_DIR\"\
+      \n\n### VIASH END\n\n# get absolute path to file\nif (!file.exists(dirname(par\\\
+      $output))) dir.create(dirname(par\\$output), recursive = TRUE)\nresources_dir\
+      \ <- normalizePath(resources_dir)\npath <- file.path(normalizePath(dirname(par\\\
+      $output), mustWork = FALSE), basename(par\\$output))\n\n# set wd to output dir\n\
+      orig_wd <- getwd()\non.exit(setwd(orig_wd))\nsetwd(dirname(path))\n\n# copy\
+      \ template to output dir\nrmd <- file.path(\".\", gsub(\"\\\\\\\\.[^\\\\\\\\\
+      .]*\\$\", \".Rmd\", basename(path)))\nfile.copy(\n  file.path(resources_dir,\
+      \ \"report.Rmd\"), \n  rmd\n)\non.exit(file.remove(rmd))\n\n# render markdown\n\
+      rmarkdown::render(\n  input = rmd,\n  output_file = basename(path),\n  output_format\
+      \ = par\\$format,\n  params = par[c(\"title\", \"mean\", \"sd\")]\n)\nVIASHMAIN\n\
+      Rscript \"\\$tempscript\"\n\nVIASHEOF\n"
+    type: bash_script
+  - is_executable: false
+    path: file:/Users/toni/code/viash_bookdown_test/src/viash_bookdown/make_vignette/report.Rmd
+    type: file
+platform:
+  type: native
+  r:
+    cran:
+    - optparse
+    - rmarkdown
+    - tidyverse
+    url: []
+    github: []
+    gitlab: []
+    svn: []
+    bitbucket: []
+    bioc: []
+    git: []

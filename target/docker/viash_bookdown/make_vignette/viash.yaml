@@ -1,16 +1,16 @@
 info:
-  platform_path: src/component1/platform_docker.yaml
-  git_commit: 402995c
-  functionality_path: src/component1/functionality.yaml
-  output_path: target/component1
-  executable_path: target/component1/make_vignette
+  platform_path: src/viash_bookdown/make_vignette/platform_docker.yaml
+  functionality_path: src/viash_bookdown/make_vignette/functionality.yaml
+  output_path: target/docker/viash_bookdown/make_vignette
   version: v0.2.0-rc2
-  git_remote: '[Ljava.lang.String;@446a1e84'
+  executable_path: target/docker/viash_bookdown/make_vignette/make_vignette
+  git_commit: 54e3b09
+  git_remote: '[Ljava.lang.String;@4dc27487'
 functionality:
   description: An example for generating an RMarkdown output.
-  tests: []
   resources:
-  - text: "#!/usr/bin/env bash\n\nset -e\n\n# define helper functions\n# ViashQuote:\
+  - type: bash_script
+    text: "#!/usr/bin/env bash\n\nset -e\n\n# define helper functions\n# ViashQuote:\
       \ put quotes around non flag values\n# $1     : unquoted string\n# return :\
       \ possibly quoted string\n# examples:\n#   ViashQuote --foo      # returns --foo\n\
       #   ViashQuote bar        # returns 'bar'\n#   Viashquote --foo=bar  # returns\
@@ -147,81 +147,81 @@ functionality:
       \n# render markdown\nrmarkdown::render(\n  input = rmd,\n  output_file = basename(path),\n\
       \  output_format = par\\$format,\n  params = par[c(\"title\", \"mean\", \"sd\"\
       )]\n)\nVIASHMAIN\nRscript \"\\$tempscript\"\n\nVIASHEOF\n"
-    type: bash_script
     is_executable: true
     name: make_vignette
-  - path: file:/home/rcannood/workspace_di/bookdown/src/component1/report.Rmd
+  - type: file
+    path: file:/Users/toni/code/viash_bookdown_test/src/viash_bookdown/make_vignette/report.Rmd
     is_executable: false
-    type: file
-  name: make_vignette
   arguments:
-  - required: false
-    multiple: false
-    type: string
-    description: A title for the plot
-    name: --title
-    default: My plot
-    multiple_sep: ':'
-    alternatives:
+  - alternatives:
     - -t
+    multiple: false
+    default: My plot
+    description: A title for the plot
+    multiple_sep: ':'
+    name: --title
     direction: Input
-  - name: --mean
-    type: double
-    description: The mean of the distribution
-    default: 0.0
-    alternatives:
+    required: false
+    type: string
+  - alternatives:
     - -m
+    type: double
+    default: 0.0
+    multiple: false
+    required: false
+    multiple_sep: ':'
+    name: --mean
+    description: The mean of the distribution
+    direction: Input
+  - alternatives:
+    - -s
+    multiple: false
+    direction: Input
+    description: The standard deviation of the distribution
     multiple_sep: ':'
     required: false
-    multiple: false
-    direction: Input
-  - multiple_sep: ':'
-    required: false
-    default: 1.0
-    description: The standard deviation of the distribution
-    multiple: false
-    direction: Input
-    name: --sd
     type: double
-    alternatives:
-    - -s
-  - multiple_sep: ':'
+    name: --sd
+    default: 1.0
+  - multiple: false
+    must_exist: false
+    description: Path of the report.
+    type: file
+    direction: Output
     required: false
     alternatives:
     - -o
-    multiple: false
-    direction: Output
-    must_exist: false
-    type: file
-    description: Path of the report.
     name: --output
-  - name: --format
     multiple_sep: ':'
-    required: false
-    multiple: false
-    alternatives:
-    - -f
-    description: The format of the output file.
-    default: pdf_document
-    values:
+  - values:
     - pdf_document
     - html_document
-    direction: Input
+    multiple_sep: ':'
     type: string
+    multiple: false
+    direction: Input
+    description: The format of the output file.
+    required: false
+    default: pdf_document
+    name: --format
+    alternatives:
+    - -f
+  name: make_vignette
+  tests: []
 platform:
-  type: docker
   image: rocker/verse
   r:
-    git: []
-    url: []
-    bioc: []
+    gitlab: []
     cran:
     - optparse
     - rmarkdown
     - tidyverse
-    gitlab: []
+    url: []
     bitbucket: []
     svn: []
     github: []
-  workdir: /app
+    bioc: []
+    git: []
   resolve_volume: Automatic
+  type: docker
+  workdir: /app

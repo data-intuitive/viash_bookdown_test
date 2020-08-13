@@ -1,12 +1,14 @@
 info:
-  executable_path: target/merge/merge_reports
-  platform_path: src/merge/platform_docker.yaml
-  output_path: target/merge
-  git_commit: 402995c
-  functionality_path: src/merge/functionality.yaml
-  git_remote: '[Ljava.lang.String;@25df00a0'
   version: v0.2.0-rc2
+  functionality_path: src/viash_bookdown/merge_reports/functionality.yaml
+  git_remote: '[Ljava.lang.String;@1b1cfb87'
+  output_path: target/docker/viash_bookdown/merge_reports
+  platform_path: src/viash_bookdown/merge_reports/platform_docker.yaml
+  executable_path: target/docker/viash_bookdown/merge_reports/merge_reports
+  git_commit: 54e3b09
 functionality:
+  tests: []
+  name: merge_reports
   resources:
   - text: "#!/usr/bin/env bash\n\nset -e\n\n# define helper functions\n# ViashQuote:\
       \ put quotes around non flag values\n# $1     : unquoted string\n# return :\
@@ -160,64 +162,62 @@ functionality:
       \\\\\"]\\\\ndelete_merged_file: true\\\\n\")\nwriteLines(bookdown_yaml, \"_bookdown.yml\"\
       )\n\nbookdown::render_book(\n  rmd,\n  output_format = par\\$format,\n  clean_envir\
       \ = FALSE\n)\nVIASHMAIN\nRscript \"\\$tempscript\"\n\nVIASHEOF\n"
-    is_executable: true
     name: merge_reports
+    is_executable: true
     type: bash_script
   - is_executable: false
     type: file
-    path: file:/home/rcannood/workspace_di/bookdown/src/merge/index.Rmd
+    path: file:/Users/toni/code/viash_bookdown_test/src/viash_bookdown/merge_reports/index.Rmd
+  description: Merge multiple reports into one bookdown
   arguments:
-  - direction: Input
-    default: report.md
-    required: true
-    must_exist: false
-    name: --input
+  - type: file
     description: One or more input files (md or Rmd)
-    type: file
-    multiple: true
+    name: --input
+    must_exist: false
+    required: true
     multiple_sep: ':'
+    multiple: true
+    default: report.md
     alternatives:
     - -i
-  - direction: Output
-    description: Path of the report.
-    required: false
+    direction: Input
+  - required: false
+    direction: Output
     multiple_sep: ':'
-    must_exist: false
+    type: file
     name: --output
+    must_exist: false
+    description: Path of the report.
     alternatives:
     - -o
     multiple: false
-    type: file
-  - name: --format
-    direction: Input
-    multiple_sep: ':'
-    multiple: false
-    default: bookdown::pdf_book
+  - multiple_sep: ':'
     required: false
-    type: string
+    direction: Input
+    name: --format
+    multiple: false
     alternatives:
     - -f
     description: The format of the output file.
+    default: bookdown::pdf_book
+    type: string
     values:
     - bookdown::pdf_book
     - bookdown::html_book
-  name: merge_reports
-  tests: []
-  description: Merge multiple reports into one bookdown
 platform:
+  type: docker
+  resolve_volume: Automatic
+  workdir: /app
+  image: rocker/verse
   r:
+    bioc: []
     bitbucket: []
-    svn: []
-    gitlab: []
-    github: []
     cran:
     - optparse
     - rmarkdown
     - tidyverse
+    gitlab: []
     url: []
-    bioc: []
+    github: []
     git: []
-  type: docker
-  image: rocker/verse
-  resolve_volume: Automatic
-  workdir: /app
+    svn: []
